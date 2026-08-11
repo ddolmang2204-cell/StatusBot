@@ -34,6 +34,12 @@ TOKEN = os.environ.get("DISCORD_TOKEN")
 TARGET_CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
 
 # ==========================================
+# [관리자 고유 ID 설정]
+# 여기에 명령어를 사용할 수 있는 관리자들의 ID를 넣습니다.
+# ==========================================
+ADMIN_IDS = [1529055485964320839, 1429412320194592811]
+
+# ==========================================
 # [링크 설정 칸]
 # ==========================================
 EXECUTOR_LINKS = {
@@ -54,7 +60,7 @@ EXECUTOR_LINKS = {
     "Opiumware": "https://use.opiumware.today/",
 }
 
-# 웹사이트에서 상태를 크롤링해오는 함수 (개선됨)
+# 웹사이트에서 상태를 크롤링해오는 함수
 async def fetch_statuses():
     url = "https://robloxexecutorstatus.com/"
     statuses = {}
@@ -68,14 +74,11 @@ async def fetch_statuses():
                     soup = BeautifulSoup(html, 'html.parser')
                     
                     for name in EXECUTOR_LINKS.keys():
-                        # 이름이 포함된 태그를 찾음
                         element = soup.find(string=lambda text: text and name.lower() in text.lower())
                         if element:
-                            # 부모 태그 혹은 형제 태그까지 전체 텍스트를 가져와서 확인
                             container = element.find_parent(['tr', 'div', 'article', 'section'])
                             container_text = container.get_text().upper() if container else element.find_parent().get_text().upper()
                             
-                            # 'WORKING' 단어가 들어가 있으면 초록색, 아니면 빨간색
                             if "WORKING" in container_text:
                                 statuses[name] = "🟢"
                             else:
@@ -91,10 +94,15 @@ async def fetch_statuses():
 
 # 메시지 생성 및 전송 공통 함수
 async def send_status_message(channel):
-    async for message in channel.history(limit=5):
-        if message.author == bot.user:
-            await message.delete()
-            break
+    # 1. 봇의 이전 메시지 삭제 시도 (권한 없으면 무시)
+    try:
+        async for message in channel.history(limit=5):
+            if message.author == bot.user:
+                await message.delete()
+                break
+    except Exception as e:
+        print(f"이전 메시지 삭제/조회 권한 없음 (무시됨): {e}")
+        pass
 
     statuses = await fetch_statuses()
 
@@ -119,7 +127,12 @@ async def send_status_message(channel):
 
     embed = discord.Embed(color=0x2b2d31)
     embed.description = description
-    await channel.send(embed=embed)
+    
+    # 2. 메시지 전송 시도
+    try:
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"메시지 전송 권한 없음: {e}")
 
 @tasks.loop(hours=6)
 async def auto_update_status():
@@ -131,10 +144,16 @@ async def auto_update_status():
 
 @bot.command(name='상태')
 async def show_status(ctx):
+    # 관리자 확인: 요청한 사람의 ID가 ADMIN_IDS 목록에 없으면 무시
+    if ctx.author.id not in ADMIN_IDS:
+        return # 권한이 없는 경우 아무 반응 없이 조용히 종료합니다.
+        
     await send_status_message(ctx.channel)
+    
+    # 명령어를 입력한 관리자의 '!상태' 메시지 삭제 시도 (권한 없으면 무시)
     try:
         await ctx.message.delete()
-    except:
+    except Exception:
         pass
 
 @bot.event
@@ -145,4 +164,7 @@ async def on_ready():
 
 if __name__ == "__main__":
     keep_alive()
-    bot.run(TOKEN)
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("에러: DISCORD_TOKEN이 설정되지 않았습니다. 환경변수 설정을 확인해주세요.")
