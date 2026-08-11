@@ -1,0 +1,5 @@
+discord.py
+flask
+beautifulsoup4
+aiohttp
+python-dotenv
