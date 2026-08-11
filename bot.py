@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import discord
 from discord.ext import tasks, commands
 from flask import Flask
@@ -59,41 +60,45 @@ EXECUTOR_LINKS = {
     "Opiumware": "https://use.opiumware.today/",
 }
 
-# executors.online 사이트에서 상태를 크롤링해오는 함수
+# 정확하게 상태를 대조해서 읽어오는 크롤링 함수
 async def fetch_statuses():
-    url = "https://www.executors.online/executors"
-    statuses = {}
-    
+    urls = [
+        "https://www.executors.online/executors",
+        "https://whatexpsare.online/"
+    ]
+    is_working = {name: False for name in EXECUTOR_LINKS.keys()}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
     async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    
-                    for name in EXECUTOR_LINKS.keys():
-                        element = soup.find(string=lambda text: text and name.lower() in text.lower())
-                        if element:
-                            parent = element.find_parent()
-                            text_content = parent.get_text() + " " + "".join([s.get_text() for s in parent.find_next_siblings()])
-                            
-                            if "WORKING" in text_content.upper():
-                                statuses[name] = "🟢"
-                            else:
-                                statuses[name] = "🔴"
-                        else:
-                            statuses[name] = "🔴"
-        except Exception as e:
-            print(f"상태 크롤링 중 오류 발생: {e}")
-            for name in EXECUTOR_LINKS.keys():
-                statuses[name] = "🔴"
-                
-    return statuses
+        for url in urls:
+            try:
+                async with session.get(url, headers=headers, timeout=10) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        soup = BeautifulSoup(html, 'html.parser')
+                        
+                        for name in EXECUTOR_LINKS.keys():
+                            # 사이트 내에서 해당 이름이 포함된 모든 태그 혹은 문자열 검색
+                            elements = soup.find_all(string=lambda text: text and name.lower() in text.lower())
+                            for el in elements:
+                                parent = el.find_parent()
+                                if parent:
+                                    # 부모 및 주변 형제 요소의 텍스트를 모두 합쳐서 검사
+                                    context_text = parent.get_text() + " " + "".join([s.get_text() for s in parent.find_next_siblings()])
+                                    context_text = context_text.lower()
+                                    
+                                    # 명확하게 작동 중을 뜻하는 단어가 있을 때만 True로 설정
+                                    if "working" in context_text or "online" in context_text or "updated" in context_text:
+                                        # 단, 'not working'이나 'offline'이 포함된 경우는 제외
+                                        if "not working" not in context_text and "offline" not in context_text and "patched" not in context_text:
+                                            is_working[name] = True
+            except Exception as e:
+                print(f"사이트 {url} 체크 중 오류 발생: {e}")
+    
+    return {name: "🟢" if is_working[name] else "🔴" for name in EXECUTOR_LINKS.keys()}
 
 # 상태 메시지 전송 및 갱신 함수
 async def send_status_message(channel):
-    # 이전 봇 메시지 삭제 (새로고침 효과)
     try:
         async for message in channel.history(limit=5):
             if message.author == bot.user:
@@ -103,8 +108,10 @@ async def send_status_message(channel):
         print(f"이전 메시지 삭제/조회 권한 없음 (무시됨): {e}")
 
     statuses = await fetch_statuses()
+    date_str = datetime.now().strftime("%Y-%m-%d")
 
     description = (
+        f"📅 **마지막 갱신 날짜:** `{date_str}`\n\n"
         "**Windows [윈도우]**\n\n"
         f"• **Potassium** / {{유료}}: [바로가기]({EXECUTOR_LINKS['Potassium']}) {statuses.get('Potassium', '🔴')}\n"
         f"• **SirHurt** / {{유료}}: [바로가기]({EXECUTOR_LINKS['SirHurt']}) {statuses.get('SirHurt', '🔴')}\n"
@@ -123,15 +130,20 @@ async def send_status_message(channel):
         f"• **Opiumware** / 무료/키필요: [바로가기]({EXECUTOR_LINKS['Opiumware']}) {statuses.get('Opiumware', '🔴')}"
     )
 
-    embed = discord.Embed(title="⚡ Roblox Executor Status", color=0x2b2d31)
+    embed = discord.Embed(title="Scripter Si | Status", color=0x2b2d31)
     embed.description = description
+    embed.set_image(url="attachment://scs_logo.png")
     
     try:
+        with open('image_3.png', 'rb') as photo:
+            file = discord.File(photo, filename='scs_logo.png')
+            await channel.send(embed=embed, file=file)
+    except FileNotFoundError:
+        print("에러: 'image_3.png' 파일을 찾을 수 없습니다. 텍스트만 전송합니다.")
         await channel.send(embed=embed)
     except Exception as e:
-        print(f"메시지 전송 권한 없음: {e}")
+        print(f"메시지 전송 중 오류 발생: {e}")
 
-# 6시간마다 자동 갱신 루프
 @tasks.loop(hours=6)
 async def auto_update_status():
     if not TARGET_CHANNEL_ID:
@@ -140,7 +152,6 @@ async def auto_update_status():
     if channel:
         await send_status_message(channel)
 
-# 수동 명령어 (!상태)
 @bot.command(name='상태')
 async def show_status(ctx):
     if ctx.author.id not in ADMIN_IDS:
@@ -153,29 +164,15 @@ async def show_status(ctx):
     except Exception:
         pass
 
-# 봇이 켜졌을 때 실행
 @bot.event
 async def on_ready():
     print(f"로그인 성공: {bot.user.name}")
-    
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
     
     if target_channel:
-        print("사진을 전송합니다...")
-        try:
-            # 봇 폴더에 'image_3.png' 파일이 있어야 합니다.
-            with open('image_3.png', 'rb') as photo:
-                await target_channel.send(file=discord.File(photo, 'scs_logo.png'))
-            print("사진 전송 완료.")
-            
-            print("상태 메시지를 전송합니다...")
-            await send_status_message(target_channel)
-            print("상태 메시지 전송 완료.")
-            
-        except FileNotFoundError:
-            print("에러: 'image_3.png' 파일을 찾을 수 없습니다. 프로젝트 폴더에 이미지 파일을 넣어주세요.")
-        except Exception as e:
-            print(f"사진 또는 메시지 전송 중 오류 발생: {e}")
+        print("상태 메시지를 전송합니다...")
+        await send_status_message(target_channel)
+        print("상태 메시지 전송 완료.")
     else:
         print(f"에러: ID가 {TARGET_CHANNEL_ID}인 채널을 찾을 수 없습니다.")
 
