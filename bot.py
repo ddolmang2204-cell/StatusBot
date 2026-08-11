@@ -1,13 +1,13 @@
 import os
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 from flask import Flask
 from threading import Thread
 import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# 로컬 테스트 시 .env 파일 로드 (Render 등 서버에서는 자동으로 환경 변수 읽음)
+# 로컬 테스트 시 .env 파일 로드
 load_dotenv()
 
 # 1. Flask 웹 서버 (UptimeRobot 유지용)
@@ -24,17 +24,17 @@ def keep_alive():
     t = Thread(target=run_flask)
     t.start()
 
-# 2. 디스코드 봇 설정 (명령어/접두사 없음)
+# 2. 디스코드 봇 설정 (명령어 접두사 '!' 사용)
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 # 환경 변수에서 토큰과 채널 ID 불러오기
 TOKEN = os.environ.get("DISCORD_TOKEN")
 TARGET_CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
 
 # ==========================================
-# [링크 설정 칸] 각 실행기별 바로가기 주소를 입력하세요!
+# [링크 설정 칸]
 # ==========================================
 EXECUTOR_LINKS = {
     # Windows
@@ -54,12 +54,12 @@ EXECUTOR_LINKS = {
     "Opiumware": "https://use.opiumware.today/",
 }
 
-# 웹사이트에서 상태를 크롤링해오는 함수
+# 웹사이트에서 상태를 크롤링해오는 함수 (개선됨)
 async def fetch_statuses():
     url = "https://robloxexecutorstatus.com/"
     statuses = {}
     
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, headers=headers) as response:
@@ -68,13 +68,16 @@ async def fetch_statuses():
                     soup = BeautifulSoup(html, 'html.parser')
                     
                     for name in EXECUTOR_LINKS.keys():
+                        # 이름이 포함된 태그를 찾음
                         element = soup.find(string=lambda text: text and name.lower() in text.lower())
                         if element:
-                            parent_text = element.find_parent().get_text().upper()
-                            if "WORKING" in parent_text:
+                            # 부모 태그 혹은 형제 태그까지 전체 텍스트를 가져와서 확인
+                            container = element.find_parent(['tr', 'div', 'article', 'section'])
+                            container_text = container.get_text().upper() if container else element.find_parent().get_text().upper()
+                            
+                            # 'WORKING' 단어가 들어가 있으면 초록색, 아니면 빨간색
+                            if "WORKING" in container_text:
                                 statuses[name] = "🟢"
-                            elif "PATCHED" in parent_text:
-                                statuses[name] = "🔴"
                             else:
                                 statuses[name] = "🔴"
                         else:
@@ -86,26 +89,15 @@ async def fetch_statuses():
                 
     return statuses
 
-# 6시간마다 실행되는 루프 작업
-@tasks.loop(hours=6)
-async def update_status():
-    if not TARGET_CHANNEL_ID:
-        return
-    
-    channel = bot.get_channel(TARGET_CHANNEL_ID)
-    if not channel:
-        return
-
-    # 이전 메시지 삭제 (최근 5개 중 봇이 보낸 것 삭제)
+# 메시지 생성 및 전송 공통 함수
+async def send_status_message(channel):
     async for message in channel.history(limit=5):
         if message.author == bot.user:
             await message.delete()
             break
 
-    # 사이트에서 최신 상태 가져오기
     statuses = await fetch_statuses()
 
-    # 메시지 디자인 포맷 구성
     description = (
         "**Windows [윈도우]**\n\n"
         f"• **Potassium** / {{유료}}: [바로가기]({EXECUTOR_LINKS['Potassium']}) {statuses.get('Potassium', '🔴')}\n"
@@ -127,14 +119,29 @@ async def update_status():
 
     embed = discord.Embed(color=0x2b2d31)
     embed.description = description
-
     await channel.send(embed=embed)
+
+@tasks.loop(hours=6)
+async def auto_update_status():
+    if not TARGET_CHANNEL_ID:
+        return
+    channel = bot.get_channel(TARGET_CHANNEL_ID)
+    if channel:
+        await send_status_message(channel)
+
+@bot.command(name='상태')
+async def show_status(ctx):
+    await send_status_message(ctx.channel)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 @bot.event
 async def on_ready():
     print(f"로그인 성공: {bot.user.name}")
-    if not update_status.is_running():
-        update_status.start()
+    if not auto_update_status.is_running():
+        auto_update_status.start()
 
 if __name__ == "__main__":
     keep_alive()
