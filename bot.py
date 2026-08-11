@@ -24,7 +24,7 @@ def keep_alive():
     t = Thread(target=run_flask)
     t.start()
 
-# 2. 디스코드 봇 설정 (명령어 접두사 '!' 사용)
+# 2. 디스코드 봇 설정
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -35,7 +35,6 @@ TARGET_CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
 
 # ==========================================
 # [관리자 고유 ID 설정]
-# 여기에 명령어를 사용할 수 있는 관리자들의 ID를 넣습니다.
 # ==========================================
 ADMIN_IDS = [1529055485964320839, 1429412320194592811]
 
@@ -60,9 +59,9 @@ EXECUTOR_LINKS = {
     "Opiumware": "https://use.opiumware.today/",
 }
 
-# 웹사이트에서 상태를 크롤링해오는 함수
+# executors.online 사이트에서 상태를 크롤링해오는 함수
 async def fetch_statuses():
-    url = "https://robloxexecutorstatus.com/"
+    url = "https://www.executors.online/executors"
     statuses = {}
     
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -76,10 +75,10 @@ async def fetch_statuses():
                     for name in EXECUTOR_LINKS.keys():
                         element = soup.find(string=lambda text: text and name.lower() in text.lower())
                         if element:
-                            container = element.find_parent(['tr', 'div', 'article', 'section'])
-                            container_text = container.get_text().upper() if container else element.find_parent().get_text().upper()
+                            parent = element.find_parent()
+                            text_content = parent.get_text() + " " + "".join([s.get_text() for s in parent.find_next_siblings()])
                             
-                            if "WORKING" in container_text:
+                            if "WORKING" in text_content.upper():
                                 statuses[name] = "🟢"
                             else:
                                 statuses[name] = "🔴"
@@ -92,9 +91,9 @@ async def fetch_statuses():
                 
     return statuses
 
-# 메시지 생성 및 전송 공통 함수
+# 상태 메시지 전송 및 갱신 함수
 async def send_status_message(channel):
-    # 1. 봇의 이전 메시지 삭제 시도 (권한 없으면 무시)
+    # 이전 봇 메시지 삭제 (새로고침 효과)
     try:
         async for message in channel.history(limit=5):
             if message.author == bot.user:
@@ -102,7 +101,6 @@ async def send_status_message(channel):
                 break
     except Exception as e:
         print(f"이전 메시지 삭제/조회 권한 없음 (무시됨): {e}")
-        pass
 
     statuses = await fetch_statuses()
 
@@ -125,15 +123,15 @@ async def send_status_message(channel):
         f"• **Opiumware** / 무료/키필요: [바로가기]({EXECUTOR_LINKS['Opiumware']}) {statuses.get('Opiumware', '🔴')}"
     )
 
-    embed = discord.Embed(color=0x2b2d31)
+    embed = discord.Embed(title="⚡ Roblox Executor Status", color=0x2b2d31)
     embed.description = description
     
-    # 2. 메시지 전송 시도
     try:
         await channel.send(embed=embed)
     except Exception as e:
         print(f"메시지 전송 권한 없음: {e}")
 
+# 6시간마다 자동 갱신 루프
 @tasks.loop(hours=6)
 async def auto_update_status():
     if not TARGET_CHANNEL_ID:
@@ -142,23 +140,45 @@ async def auto_update_status():
     if channel:
         await send_status_message(channel)
 
+# 수동 명령어 (!상태)
 @bot.command(name='상태')
 async def show_status(ctx):
-    # 관리자 확인: 요청한 사람의 ID가 ADMIN_IDS 목록에 없으면 무시
     if ctx.author.id not in ADMIN_IDS:
-        return # 권한이 없는 경우 아무 반응 없이 조용히 종료합니다.
+        return 
         
     await send_status_message(ctx.channel)
     
-    # 명령어를 입력한 관리자의 '!상태' 메시지 삭제 시도 (권한 없으면 무시)
     try:
         await ctx.message.delete()
     except Exception:
         pass
 
+# 봇이 켜졌을 때 실행
 @bot.event
 async def on_ready():
     print(f"로그인 성공: {bot.user.name}")
+    
+    target_channel = bot.get_channel(TARGET_CHANNEL_ID)
+    
+    if target_channel:
+        print("사진을 전송합니다...")
+        try:
+            # 봇 폴더에 'image_3.png' 파일이 있어야 합니다.
+            with open('image_3.png', 'rb') as photo:
+                await target_channel.send(file=discord.File(photo, 'scs_logo.png'))
+            print("사진 전송 완료.")
+            
+            print("상태 메시지를 전송합니다...")
+            await send_status_message(target_channel)
+            print("상태 메시지 전송 완료.")
+            
+        except FileNotFoundError:
+            print("에러: 'image_3.png' 파일을 찾을 수 없습니다. 프로젝트 폴더에 이미지 파일을 넣어주세요.")
+        except Exception as e:
+            print(f"사진 또는 메시지 전송 중 오류 발생: {e}")
+    else:
+        print(f"에러: ID가 {TARGET_CHANNEL_ID}인 채널을 찾을 수 없습니다.")
+
     if not auto_update_status.is_running():
         auto_update_status.start()
 
@@ -167,4 +187,4 @@ if __name__ == "__main__":
     if TOKEN:
         bot.run(TOKEN)
     else:
-        print("에러: DISCORD_TOKEN이 설정되지 않았습니다. 환경변수 설정을 확인해주세요.")
+        print("에러: DISCORD_TOKEN이 설정되지 않았습니다.")
