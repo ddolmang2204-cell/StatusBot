@@ -39,9 +39,9 @@ REQUEST_DELAY = 1
 
 CACHE_TTL = 3600
 
-# ==================== 상태 이모지 (커스텀) ====================
-GREEN_STATUS = "https://cdn.discordapp.com/emojis/1536697205065523290.webp?size=44&animated=true"
-RED_STATUS = "https://cdn.discordapp.com/emojis/1536696775895949434.webp?size=44&animated=true"
+# ==================== 상태 이모지 ====================
+GREEN_STATUS = ":639945verifiedbadge:"
+RED_STATUS = ":12870loading:"
 
 LOGO_URL = os.environ.get("LOGO_URL", "")
 
@@ -367,7 +367,7 @@ async def fetch_statuses(force=False):
         logger.info(
             "[최종 결과]\n"
             + json.dumps(
-                {k: "✅ Online" if v == GREEN_STATUS else "❌ Offline" for k, v in result.items()},
+                result,
                 indent=2,
                 ensure_ascii=False
             )
