@@ -39,6 +39,10 @@ REQUEST_DELAY = 1
 
 CACHE_TTL = 3600
 
+# ==================== 상태 이모지 (커스텀) ====================
+GREEN_STATUS = "https://cdn.discordapp.com/emojis/1536697205065523290.webp?size=44&animated=true"
+RED_STATUS = "https://cdn.discordapp.com/emojis/1536696775895949434.webp?size=44&animated=true"
+
 LOGO_URL = os.environ.get("LOGO_URL", "")
 
 # ==================== WEAO 설정 ====================
@@ -52,8 +56,8 @@ WEAO_HEADERS = {
 }
 
 # Discord에 표시할 항목과 WEAO의 title을 정확하게 연결합니다.
-# WEAO API의 updateStatus=True -> 🟢
-# WEAO API의 updateStatus=False -> 🔴
+# WEAO API의 updateStatus=True -> GREEN_STATUS
+# WEAO API의 updateStatus=False -> RED_STATUS
 EXECUTOR_LINKS = {
     "Potassium": "https://www.potassium.pro/",
     "SirHurt": "https://sirhurt.net/",
@@ -270,9 +274,9 @@ def parse_weao_status(items):
     """
     WEAO API의 updateStatus 값을 그대로 사용합니다.
 
-    True  -> 🟢
-    False -> 🔴
-    항목 없음 -> 🔴
+    True  -> GREEN_STATUS
+    False -> RED_STATUS
+    항목 없음 -> RED_STATUS
 
     HTML 문구나 'online/working' 같은 추측성 문자열은
     사용하지 않습니다.
@@ -286,18 +290,18 @@ def parse_weao_status(items):
             logger.warning(
                 f"[WEAO] {executor_name}: API에서 항목을 찾지 못함"
             )
-            result[executor_name] = "🔴"
+            result[executor_name] = RED_STATUS
             continue
 
         update_status = item.get("updateStatus")
 
         if isinstance(update_status, bool):
             result[executor_name] = (
-                "🟢" if update_status else "🔴"
+                GREEN_STATUS if update_status else RED_STATUS
             )
             logger.info(
                 f"[WEAO] {executor_name}: "
-                f"{'🟢 Updated' if update_status else '🔴 Not Updated'}"
+                f"{'✅ Updated' if update_status else '❌ Not Updated'}"
             )
         else:
             logger.warning(
@@ -305,7 +309,7 @@ def parse_weao_status(items):
                 f"updateStatus 값이 없음/비정상 "
                 f"({update_status!r})"
             )
-            result[executor_name] = "🔴"
+            result[executor_name] = RED_STATUS
 
     return result
 
@@ -329,7 +333,7 @@ async def fetch_statuses(force=False):
                 "[WEAO] 상태 데이터를 가져오지 못했습니다."
             )
             return {
-                name: "🔴"
+                name: RED_STATUS
                 for name in EXECUTOR_LINKS
             }
 
@@ -343,7 +347,7 @@ async def fetch_statuses(force=False):
                 f"[WEAO] 응답 내용: {response.text[:1000]}"
             )
             return {
-                name: "🔴"
+                name: RED_STATUS
                 for name in EXECUTOR_LINKS
             }
 
@@ -353,7 +357,7 @@ async def fetch_statuses(force=False):
                 f"{type(data).__name__}"
             )
             return {
-                name: "🔴"
+                name: RED_STATUS
                 for name in EXECUTOR_LINKS
             }
 
@@ -363,7 +367,7 @@ async def fetch_statuses(force=False):
         logger.info(
             "[최종 결과]\n"
             + json.dumps(
-                result,
+                {k: "✅ Online" if v == GREEN_STATUS else "❌ Offline" for k, v in result.items()},
                 indent=2,
                 ensure_ascii=False
             )
@@ -416,45 +420,45 @@ async def send_status_message(channel, force=False):
         "**Windows [윈도우]**\n\n"
         f"• **Potassium** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['Potassium']}) "
-        f"{statuses.get('Potassium', '🔴')}\n"
+        f"{statuses.get('Potassium', RED_STATUS)}\n"
         f"• **SirHurt** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['SirHurt']}) "
-        f"{statuses.get('SirHurt', '🔴')}\n"
+        f"{statuses.get('SirHurt', RED_STATUS)}\n"
         f"• **Volt** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['Volt']}) "
-        f"{statuses.get('Volt', '🔴')}\n"
+        f"{statuses.get('Volt', RED_STATUS)}\n"
         f"• **Wave** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['Wave']}) "
-        f"{statuses.get('Wave', '🔴')}\n"
+        f"{statuses.get('Wave', RED_STATUS)}\n"
         f"• **Synapse Z** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['Synapse Z']}) "
-        f"{statuses.get('Synapse Z', '🔴')}\n"
+        f"{statuses.get('Synapse Z', RED_STATUS)}\n"
         f"• **Cosmic** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['Cosmic']}) "
-        f"{statuses.get('Cosmic', '🔴')}\n\n"
+        f"{statuses.get('Cosmic', RED_STATUS)}\n\n"
         f"• **Xeno** / 무료: "
         f"[바로가기]({EXECUTOR_LINKS['Xeno']}) "
-        f"{statuses.get('Xeno', '🔴')}\n"
+        f"{statuses.get('Xeno', RED_STATUS)}\n"
         f"• **Velocity** / 무료/키필요: "
         f"[바로가기]({EXECUTOR_LINKS['Velocity']}) "
-        f"{statuses.get('Velocity', '🔴')}\n"
+        f"{statuses.get('Velocity', RED_STATUS)}\n"
         f"• **Solara** / 무료: "
         f"[바로가기]({EXECUTOR_LINKS['Solara']}) "
-        f"{statuses.get('Solara', '🔴')}\n"
+        f"{statuses.get('Solara', RED_STATUS)}\n"
         f"• **Madium** / 무료/키필요: "
         f"[바로가기]({EXECUTOR_LINKS['Madium']}) "
-        f"{statuses.get('Madium', '🔴')}\n"
+        f"{statuses.get('Madium', RED_STATUS)}\n"
         f"• **Real** / 무료/키필요: "
         f"[바로가기]({EXECUTOR_LINKS['Real']}) "
-        f"{statuses.get('Real', '🔴')}\n\n"
+        f"{statuses.get('Real', RED_STATUS)}\n\n"
         "────────────────────────\n\n"
         "**Mac [맥]**\n\n"
         f"• **MacSploit** / {{유료}}: "
         f"[바로가기]({EXECUTOR_LINKS['MacSploit']}) "
-        f"{statuses.get('MacSploit', '🔴')}\n\n"
+        f"{statuses.get('MacSploit', RED_STATUS)}\n\n"
         f"• **Opiumware** / 무료/키필요: "
         f"[바로가기]({EXECUTOR_LINKS['Opiumware']}) "
-        f"{statuses.get('Opiumware', '🔴')}"
+        f"{statuses.get('Opiumware', RED_STATUS)}"
     )
 
     embed = discord.Embed(
