@@ -3,11 +3,9 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timezone, timedelta
-from threading import Thread
 
 import discord
 from discord.ext import tasks, commands
-from flask import Flask
 from dotenv import load_dotenv
 from curl_cffi.requests import AsyncSession
 
@@ -31,8 +29,6 @@ FETCH_TIMEOUT = 15
 HISTORY_LIMIT = 100
 UPDATE_INTERVAL_HOURS = 6
 UPDATE_THRESHOLD_SECONDS = 21000
-FLASK_PORT = int(os.environ.get("PORT", 8080))
-
 MAX_RETRIES = 2
 RETRY_BACKOFF_BASE = 2
 REQUEST_DELAY = 1
@@ -40,8 +36,8 @@ REQUEST_DELAY = 1
 CACHE_TTL = 3600
 
 # ==================== 상태 이모지 ====================
-GREEN_STATUS = ":930485animatedblkchek:"
-RED_STATUS = ":3859_Loading:"
+GREEN_STATUS = "<:639945verifiedbadge:1537724052666454126>"
+RED_STATUS = "<:12870loading:1537724065970782258>"
 
 LOGO_URL = os.environ.get("LOGO_URL", "")
 
@@ -91,27 +87,6 @@ EXECUTOR_ALIASES = {
     "MacSploit": {"macsploit"},
     "Opiumware": {"opiumware"},
 }
-
-# ==================== Flask 서버 ====================
-app = Flask("")
-
-
-@app.route("/")
-def home():
-    return "Bot is running!"
-
-
-def run_flask():
-    try:
-        app.run(host="0.0.0.0", port=FLASK_PORT, debug=False)
-    except Exception as e:
-        logger.error(f"Flask 서버 오류: {e}")
-
-
-def keep_alive():
-    t = Thread(target=run_flask, daemon=True)
-    t.start()
-    logger.info(f"Flask 서버 시작 (포트: {FLASK_PORT})")
 
 
 # ==================== Discord 봇 설정 ====================
@@ -633,11 +608,9 @@ if __name__ == "__main__":
     logger.info("=" * 70)
     logger.info(
         "Discord Executor Status Bot 시작 "
-        "(WEAO API 버전)"
+        "(WEAO API 버전 - UptimeRobot)"
     )
     logger.info("=" * 70)
-
-    keep_alive()
 
     if not TOKEN:
         logger.error(
@@ -672,20 +645,13 @@ if __name__ == "__main__":
         f"{ADMIN_IDS if ADMIN_IDS else '없음'}"
     )
     logger.info(
-        f"  - 갱신 간격: "
-        f"{UPDATE_INTERVAL_HOURS}시간"
+        f"  - 갱신 간격: {UPDATE_INTERVAL_HOURS}시간"
     )
     logger.info(
         f"  - 캐시 TTL: {CACHE_TTL}초"
     )
     logger.info(
-        f"  - 재시도 횟수: {MAX_RETRIES}회"
-    )
-    logger.info(
-        f"  - 요청 간 대기: {REQUEST_DELAY}초"
-    )
-    logger.info(
-        f"  - 데이터 소스: {WEAO_API_URL}"
+        f"  - Keep-Alive: UptimeRobot 사용 중"
     )
     logger.info("=" * 70)
 
