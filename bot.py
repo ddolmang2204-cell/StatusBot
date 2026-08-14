@@ -40,8 +40,8 @@ REQUEST_DELAY = 1
 CACHE_TTL = 3600
 
 # ==================== 상태 이모지 ====================
-GREEN_STATUS = ":639945verifiedbadge:"
-RED_STATUS = ":12870loading:"
+GREEN_STATUS = ":930485animatedblkchek:"
+RED_STATUS = ":3859_Loading:"
 
 LOGO_URL = os.environ.get("LOGO_URL", "")
 
